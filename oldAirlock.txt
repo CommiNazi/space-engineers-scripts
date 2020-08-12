@@ -1,0 +1,55 @@
+public void Main(string argument) {
+    
+    var vent = GridTerminalSystem.GetBlockWithName( "Airlock-Vent" ) as IMyAirVent;
+    var innerDoor = GridTerminalSystem.GetBlockWithName("Airlock-Inner") as IMyDoor;
+    var outerDoor = GridTerminalSystem.GetBlockWithName("Airlock-Outer") as IMyDoor;
+    var timer = GridTerminalSystem.GetBlockWithName("Airlock-Cycle") as IMyTimerBlock;
+    
+    if( argument.Equals("continue") ) {
+        argument += vent.CustomData;
+    }
+
+    switch(argument) {
+        case "requestOuterOpen": 
+            innerDoor.CloseDoor();
+            vent.ApplyAction("Depressurize_On");            
+            vent.CustomData = "Depressurize";
+            timer.ApplyAction("Start");            
+            break;
+        case "requestOuterClose":
+            outerDoor.CloseDoor();
+            break;
+        case "continueDepressurize":
+            innerDoor.ApplyAction("OnOff_Off");
+            if( vent.GetOxygenLevel() < 0.1f ) {
+                outerDoor.ApplyAction("OnOff_On");
+                outerDoor.OpenDoor();
+                vent.CustomData = "";
+                return;
+            }
+            timer.ApplyAction("Start");
+            break;
+        case "continuePressurize":
+            outerDoor.ApplyAction("OnOff_Off");
+            if( vent.GetOxygenLevel() > 0.9f ) {
+                innerDoor.ApplyAction("OnOff_On");
+                innerDoor.OpenDoor();
+                vent.CustomData = "";
+                return;
+            }
+            timer.ApplyAction("Start");
+            break;
+        case "requestInnerOpen":
+            outerDoor.CloseDoor();
+            vent.ApplyAction("Depressurize_Off");
+            vent.CustomData = "Pressurize";
+            timer.ApplyAction("Start"); 
+            break;
+        case "requestInnerClose":
+            innerDoor.CloseDoor();
+            break;
+        default:
+            return;
+    }
+    return;
+}
