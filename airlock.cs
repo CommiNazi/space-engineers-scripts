@@ -4,12 +4,6 @@ static IMyDoor vacuumDoor;
 static Process airlockProcess;
 static bool program_initialized = false;
 
-public interface ProcessState {
-  void Enter(Process process);
-  void Execute(Process process);
-  void Exit(Process process);
-}
-
 public enum States {
   OpenToVacuum,
   OpenToOxygen,
@@ -23,47 +17,50 @@ public enum States {
   Ready
 }
 
+public abstract class ProcessState {
+  public abstract void Enter();
+  public abstract void Execute();
+  public abstract void Exit();
+  public override int GetHashCode() {
+    return (int)System.Enum.Parse(typeof(States), this.GetType().Name);
+  }
+}
+
 public class OpenToVacuum : ProcessState {
-  public void Enter(Process process) {
+  public override void Enter(Process process) {
     if(vent.GetOxygenLevel() > 0.1f)
       throw new Exception("Trying to open to vacuum, but warming room is pressurized");
 
     vacuumDoor.ApplyAction("OnOff_On");
   }
-  public void Execute(Process process) {
+  public override void Execute(Process process) {
     vacuumDoor.OpenDoor();
   }
-  public void Exit(Process process) {
+  public override void Exit(Process process) {
     vacuumDoor.CloseDoor();
-  }
-  public override int GetHashCode() {
-    return States.OpenToVacuum.GetHashCode();
   }
 }
 
 public class OpenToOxygen : ProcessState {
-  public void Enter(Process process) {
+  public override void Enter(Process process) {
     if(vent.GetOxygenLevel() < 0.9f)
       throw new Exception("Trying to open to pressure, but warming room is depressurized");
 
     oxygenDoor.ApplyAction("OnOff_On");
   }
-  public void Execute(Process process) {
+  public override void Execute(Process process) {
     oxygenDoor.OpenDoor();
   }
-  public void Exit(Process process) {
+  public override void Exit(Process process) {
     oxygenDoor.CloseDoor();
-  }
-  public override int GetHashCode() {
-    return States.OpenToOxygen.GetHashCode();
   }
 }
 
 public class Depressurizing : ProcessState {
-  public void Enter(Process process) {
+  public override void Enter(Process process) {
     oxygenDoor.CloseDoor();
   }
-  public void Execute(Process process) {
+  public override void Execute(Process process) {
     if(oxygenDoor.Status == DoorStatus.Closed) {
       if(!vent.Depressurize) vent.ApplyAction("Depressurize_On");
       if(oxygenDoor.Enabled) oxygenDoor.ApplyAction("OnOff_Off");
@@ -72,17 +69,14 @@ public class Depressurizing : ProcessState {
     if(vent.GetOxygenLevel() <= 0.1f)
       process.MoveNext(Command.Depressurize);
   }
-  public void Exit(Process process) {}
-  public override int GetHashCode() {
-    return States.Depressurizing.GetHashCode();
-  }
+  public override void Exit(Process process) {}
 }
 
 public class Pressurizing : ProcessState {
-  public void Enter(Process process) {
+  public override void Enter(Process process) {
     vacuumDoor.CloseDoor();
   }
-  public void Execute(Process process) {
+  public override void Execute(Process process) {
     if(vacuumDoor.Status == DoorStatus.Closed) {
       if(vent.Depressurize) vent.ApplyAction("Depressurize_Off");
       if(vacuumDoor.Enabled) vacuumDoor.ApplyAction("OnOff_Off");
@@ -91,61 +85,46 @@ public class Pressurizing : ProcessState {
     if(vent.GetOxygenLevel() >= 0.9f)
       process.MoveNext(Command.Pressurize);
   }
-  public void Exit(Process process) {}
-  public override int GetHashCode() {
-    return States.Pressurizing.GetHashCode();
-  }
+  public override void Exit(Process process) {}
 }
 
 public class Depressurized : ProcessState {
-  public void Enter(Process process) {}
-  public void Execute(Process process) {
+  public override void Enter(Process process) {}
+  public override void Execute(Process process) {
     process.MoveNext(Command.OpenVacuumDoor); // Maybe move this to Enter, to save a tick?
   }
-  public void Exit(Process process) {}
-  public override int GetHashCode() {
-    return States.Depressurized.GetHashCode();
-  }
+  public override void Exit(Process process) {}
 }
 
 public class Pressurized : ProcessState {
-  public void Enter(Process process) {}
-  public void Execute(Process process) {
+  public override void Enter(Process process) {}
+  public override void Execute(Process process) {
     process.MoveNext(Command.OpenOxygenDoor); // Maybe move this to Enter, to save a tick?
   }
-  public void Exit(Process process) {}
-  public override int GetHashCode() {
-    return States.Pressurized.GetHashCode();
-  }
+  public override void Exit(Process process) {}
 }
 
 public class Paused : ProcessState {
-  public void Enter(Process process) {
+  public override void Enter(Process process) {
     oxygenDoor.Enabled = false;
     vacuumDoor.Enabled = false;
   }
-  public void Execute(Process process) {}
-  public void Exit(Process process) {}
-  public override int GetHashCode() {
-    return States.Paused.GetHashCode();
-  }
+  public override void Execute(Process process) {}
+  public override void Exit(Process process) {}
 }
 
 public class Inactive : ProcessState {
-  public void Enter(Process process) {
+  public override void Enter(Process process) {
     oxygenDoor.Enabled = true;
     vacuumDoor.Enabled = true;
     vent.Enabled = false;
   }
-  public void Execute(Process process) {}
-  public void Exit(Process process) {}
-  public override int GetHashCode() {
-    return States.Inactive.GetHashCode();
-  }
+  public override void Execute(Process process) {}
+  public override void Exit(Process process) {}
 }
 
 public class Terminated : ProcessState {
-  public void Enter(Process process) {
+  public override void Enter(Process process) {
     oxygenDoor.OpenDoor();
     oxygenDoor.Enabled = false;
 
@@ -154,15 +133,12 @@ public class Terminated : ProcessState {
 
     vent.Enabled = false;
   }
-  public void Execute(Process process) {}
-  public void Exit(Process process) {}
-  public override int GetHashCode() {
-    return States.Terminated.GetHashCode();
-  }
+  public override void Execute(Process process) {}
+  public override void Exit(Process process) {}
 }
 
 public class Ready : ProcessState {
-  public void Enter(Process process) {
+  public override void Enter(Process process) {
     oxygenDoor.Enabled = true;
     oxygenDoor.CloseDoor();
 
@@ -172,11 +148,8 @@ public class Ready : ProcessState {
     vent.Enabled = true;
     vent.ApplyAction("Depressurize_On");
   }
-  public void Execute(Process process) {}
-  public void Exit(Process process) {}
-  public override int GetHashCode() {
-    return States.Ready.GetHashCode();
-  }
+  public override void Execute(Process process) {}
+  public override void Exit(Process process) {}
 }
 
 public enum Command {
