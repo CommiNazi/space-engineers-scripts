@@ -1,8 +1,7 @@
 static IMyAirVent vent;
 static IMyDoor oxygenDoor;
 static IMyDoor vacuumDoor;
-static IMyAirVent facilityVent;
-static Process ProcessManager;
+static Process airlockProcess;
 static bool program_initialized = false;
 
 public interface ProcessState {
@@ -21,9 +20,7 @@ public enum States {
   Paused,
   Inactive,
   Terminated,
-  Ready,
-  ReactorRoomPresent,
-  ReactorRoomVacant
+  Ready
 }
 
 public class OpenToVacuum : ProcessState {
@@ -182,24 +179,6 @@ public class Ready : ProcessState {
   }
 }
 
-public class ReactorRoomPresent : ProcessState {
-  Enter() {}
-  Execute() {}
-  Exit() {}
-  public override int GetHashCode() {
-    return States.ReactorRoomPresent.GetHashCode();
-  }
-}
-
-public class ReactorRoomVacant : ProcessState {
-  Enter() {}
-  Execute() {}
-  Exit() {}
-  public override int GetHashCode() {
-    return States.ReactorRoomVacant.GetHashCode()
-  }
-}
-
 public enum Command {
   Initialize,
 
@@ -212,10 +191,7 @@ public enum Command {
   OpenVacuumDoor,
 
   HoldOpen,
-  Lockdown,
-
-  EnterReactorRoom,
-  LeaveReactorRoom
+  Lockdown
 }
 
 public class Process {
@@ -247,7 +223,6 @@ public class Process {
   public Process() {
     CurrentState = new Inactive();
     transitions = new Dictionary<StateTransition, ProcessState> {
-      /* Airlock States*/
       { new StateTransition(new Ready(),          Command.RequestOxygenDoor), new Pressurizing()},
       { new StateTransition(new Pressurizing(),   Command.Pressurize),        new Pressurized()},
       { new StateTransition(new Pressurized(),    Command.OpenOxygenDoor),    new OpenToOxygen()},
@@ -261,11 +236,11 @@ public class Process {
 
       { new StateTransition(new OpenToOxygen(),   Command.RequestOxygenDoor), new OpenToOxygen()},
       { new StateTransition(new OpenToVacuum(),   Command.RequestVacuumDoor), new OpenToVacuum()},
-      { new StateTransition(new OpenToOxygen(),   Command.CloseOxygenDoor),   new Ready()},
-      { new StateTransition(new OpenToVacuum(),   Command.CloseVacuumDoor),   new Ready()},
-      { new StateTransition(new Inactive(),       Command.Initialize),        new Ready() },
+      // { new StateTransition(new OpenToOxygen(),   Command.CloseOxygenDoor),   new Ready()},
+      // { new StateTransition(new OpenToVacuum(),   Command.CloseVacuumDoor),   new Ready()},
 
       // { new StateTransition(new Terminated(),     Command.Initialize),        new Inactive() }
+      { new StateTransition(new Inactive(),       Command.Initialize),        new Ready() },
       // { new StateTransition(new Ready(),          Command.End),               new Inactive() },
       // { new StateTransition(new Ready(),          Command.Pause),             new Paused() },
       // { new StateTransition(new Inactive(),       Command.Exit),              new Terminated() },
@@ -280,7 +255,7 @@ public class Process {
 
     ProcessState nextState;
     if (!transitions.TryGetValue(transition, out nextState)) {
-      throw new Exception("Invalid transition: " + CurrentState + " -> " + command + " :: " + nextState);
+      // throw new Exception("Invalid transition: " + CurrentState + " -> " + command + " :: " + nextState);
       return CurrentState;
     }
 
@@ -312,16 +287,14 @@ public Program() {
     Runtime.UpdateFrequency = UpdateFrequency.Update1;
 
     vent         = GridTerminalSystem.GetBlockWithName("Airlock-Vent")   as IMyAirVent;
-    oxygenDoor   = GridTerminalSystem.GetBlockWithName("Airlock-Inner")  as IMyDoor;
-    vacuumDoor   = GridTerminalSystem.GetBlockWithName("Airlock-Outer")  as IMyDoor;
-    // timer        = GridTerminalSystem.GetBlockWithName("Airlock-Cycle")  as IMyTimerBlock;
-    facilityVent = GridTerminalSystem.GetBlockWithName("Crew-Vent")      as IMyAirVent;
-    ProcessManager = new Process();
+    oxygenDoor   = GridTerminalSystem.GetBlockWithName("CrewAirlockInner")  as IMyDoor;
+    vacuumDoor   = GridTerminalSystem.GetBlockWithName("CrewAirlockOuter")  as IMyDoor;
+    airlockProcess = new Process();
 }
 
 public void Main(string argument, UpdateType updateType) {
   if(!program_initialized) {
-    ProcessManager.MoveNext(Command.Initialize);
+    airlockProcess.MoveNext(Command.Initialize);
     program_initialized = true;
   }
 
@@ -329,23 +302,17 @@ public void Main(string argument, UpdateType updateType) {
     if ((updateType & CommandUpdate) != 0) {
         switch(argument) {
             case "requestOuterOpen":
-                ProcessManager.MoveNext(Command.RequestVacuumDoor);
+                airlockProcess.MoveNext(Command.RequestVacuumDoor);
                 break;
             case "requestOuterClose":
                 // Process.MoveNext(Command.RequestVacuumDoor);
                 break;
             case "requestInnerOpen":
-                ProcessManager.MoveNext(Command.RequestOxygenDoor);
+                airlockProcess.MoveNext(Command.RequestOxygenDoor);
                 break;
             case "requestInnerClose":
                 // Process.MoveNext(Command.RequestVacuumDoor);
                 break;
-            case "EnterReactorRoom":
-              ProcessManager.MoveNext(Command.EnterReactorRoom);
-              break;
-            case "LeaveReactorRoom":
-              ProcessManager.MoveNext(Command.LeaveReactorRoom);
-              break;
             default:
                 return;
         }
@@ -353,7 +320,7 @@ public void Main(string argument, UpdateType updateType) {
     }
 
     // Update source is not manual; run the polling logic
-    ProcessManager.Update();
+    airlockProcess.Update();
 
     return;
 }
