@@ -2,9 +2,7 @@
 
 string elevatorPistonTag = "CrewElevator";
 string elevatorDoorName = "CrewElevatorDoor";
-List<float> floors = new List<float>(){
-
-};
+List<float> floorHeights = new List<float>();
 
 /*----------------------------------End Config-------------------------------------------------------------------------------------------*/
 
@@ -16,14 +14,19 @@ static bool elevatorHasDoor = false;
 
 public Program() {
     Runtime.UpdateFrequency = UpdateFrequency.Update1;
-    Initialize();
+    const string initializationMessage = Initialize();
+    Echo("Initializing...   " + initializationMessage);
 }
 
-public void Initialize() {
-  CollectPistons();
-  if(elevatorDoorName && elevatorDoorName != "") {
-    elevatorDoor = GridTerminalSystem.GetBlockWithName(elevatorDoorName);
-    if(elevatorDoor) elevatorHasDoor = true;
+public string Initialize() {
+  try {
+    CollectPistons();
+    CollectDoor();
+    ParseSavedFloorHeights();
+    program_initialized = true;
+    return "Success";
+  } catch(Exception e) {
+    return e.Message;
   }
 }
 
@@ -36,13 +39,23 @@ public void CollectPistons() {
       elevatorPistons.Add(piston)
     }
   }
+
+  if(elevatorPistons.Count == 0)
+    throw new Exception('No Pistons Detected')
+}
+
+public void CollectDoor() {
+  if(elevatorDoorName && elevatorDoorName != "") {
+    elevatorDoor = GridTerminalSystem.GetBlockWithName(elevatorDoorName);
+    if(elevatorDoor) elevatorHasDoor = true;
+  }
+}
+
+public void ParseSavedFloorHeights() {
+
 }
 
 public void Main(string argument, UpdateType updateType) {
-  if(!program_initialized) {
-    airlockProcess.MoveNext(Command.Initialize);
-    program_initialized = true;
-  }
 
     // If the update source is either Trigger or Terminal, run the interactive logic
     if ((updateType & CommandUpdate) != 0) {
