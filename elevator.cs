@@ -326,7 +326,7 @@ public void Main(string argument, UpdateType updateType)
                 // return here, we could move onto the floor, but one extra tick won't kill anything.
                 return;
             }
-            else if (currentHeight != targetHeight)
+            else if (currentHeight != requestQueue.Peek())
             {
                 currentTarget = requestQueue.Dequeue()
                 GoToHeight(currentTarget);
