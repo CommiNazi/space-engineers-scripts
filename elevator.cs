@@ -79,10 +79,10 @@ class Timer
         if(ticks > 0)
         {
             ticks--;
-            return false;
+            return true;
         } else
         {
-            return true;
+            return false;
         }
     }
 }
@@ -91,8 +91,10 @@ Dictionary<string, float> floorHeights = new Dictionary<string, float>();
 UniqueQueue<float> requestQueue = new UniqueQueue<float>(new LinkedList<float>(), new Dictionary<float, int>());
 static IMyDoor elevatorDoor;
 List<IMyPistonBase> elevatorPistons = new List<IMyPistonBase>();
-static bool program_initialized = false;
-static bool elevatorHasDoor = false;
+bool program_initialized = false;
+bool elevatorHasDoor = false;
+bool isMoving = false;
+float currentTarget;
 Timer arrivedPauseDuration;
 
 public Program()
@@ -177,13 +179,20 @@ public string Initialize()
     }
 }
 
-public void SaveFloorHeight(string floorName = "")
+public float GetCurrentHeight()
 {
-    float floorHeight = 0;
+    float currentHeight = 0;
     foreach (IMyPistonBase piston in elevatorPistons)
     {
         floorHeight += piston.CurrentPosition;
     }
+    
+    return currentHeight;
+}
+
+public void SaveFloorHeight(string floorName = "")
+{
+    float floorHeight = GetCurrentHeight();
 
     if (floorName == "")
         floorName = (floorHeights.Count + 1).ToString();
@@ -213,32 +222,43 @@ public void DeleteFloorHeight(string floorName)
 
 public void GoToHeight(float targetHeight)
 {
-
-    float currentHeight = 0;
-    foreach (IMyPistonBase piston in elevatorPistons)
+    float currentHeight = GetCurrentHeight();
+    
+    if(isMoving)
     {
-        currentHeight += piston.CurrentPosition;
-    }
-
-    double pistonPortion = Math.Round(targetHeight / elevatorPistons.Count, 4);
-    foreach(IMyPistonBase piston in elevatorPistons)
+        if(currentHeight == targetHeight)
+            Arrive();
+    } 
+    else 
     {
-        piston.MinLimit = (float) pistonPortion;
-        piston.MaxLimit = (float) pistonPortion;
-        if (currentHeight < targetHeight)
+        double pistonPortion = Math.Round(targetHeight / elevatorPistons.Count, 4);
+
+        isMoving = true;
+
+        foreach(IMyPistonBase piston in elevatorPistons)
         {
-            piston.Velocity = elevatorSpeed;
-        }
-        else
-        {
-            piston.Velocity = -elevatorSpeed;
+            piston.MinLimit = (float) pistonPortion;
+            piston.MaxLimit = (float) pistonPortion;
+            if (currentHeight < targetHeight)
+            {
+                piston.Velocity = elevatorSpeed;
+            }
+            else if(currentHeight > targetHeight)
+            {
+                piston.Velocity = -elevatorSpeed;
+            }
+            else
+            {
+                Arrive();
+            }
         }
     }
-
 }
 
 public void Arrive()
 {
+    isMoving = false;
+    currentTarget  = null;
     foreach (IMyPistonBase piston in elevatorPistons)
     {
         piston.Velocity = 0.0f;
@@ -247,6 +267,7 @@ public void Arrive()
     {
         elevatorDoor.OpenDoor();
     }
+    arrivedPauseDuration = new Timer(holdAtFloorDuration);
 }
 
 public void Main(string argument, UpdateType updateType)
@@ -290,20 +311,31 @@ public void Main(string argument, UpdateType updateType)
             Echo(lastInLine.ToString());
             Echo(requestQueue.ToString());
 
-            // if currentHeight != targetHeight && isMoving
-            //   keep_moving
-            //   return
-            // else if arrivedPauseDuration != null && arrivedPauseDuration.Wait()
-            //   return
-            // else if (currentHeight != targetHeight)
-            // {
-            //   GoToHeight(requestQueue.Dequeue());
-            //   return;
-            // }
-
-
+            if(isMoving)
+            {
+                GoToHeight(currentTarget);
+                return;
+            }
+            else if(arrivedPauseDuration != null && arrivedPauseDuration.Wait()))
+            { // Arrived but pausing at floor.
+                return;
+            }
+            else if(arrivedPauseDuration != null && !arrivedPauseDuration.Wait())
+            { //Arrived, done pausing at floor
+                arrivedPauseDuration = null;
+                // return here, we could move onto the floor, but one extra tick won't kill anything.
+                return;
+            }
+            else if (currentHeight != targetHeight)
+            {
+                currentTarget = requestQueue.Dequeue()
+                GoToHeight(currentTarget);
+                return;
+            }
+        } else {
+            // make sure that once there's a new request, we're not waiting on an old timer.
+            arrivedPauseDuration = null;
         }
-        // airlockProcess.Update();
     }
 
     return;
